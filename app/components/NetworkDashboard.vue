@@ -29,7 +29,7 @@
       </UButton>
       
       <UButton 
-        color="red" 
+        color="error" 
         variant="soft" 
         icon="i-heroicons-trash" 
         @click="clearNetwork"
