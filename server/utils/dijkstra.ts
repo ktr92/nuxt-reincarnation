@@ -1,3 +1,4 @@
+// server/utils/dijkstra.ts
 import type { SpaceNode, SpaceEdge } from "../../app/types/space";
 
 interface RouteResult {
@@ -19,13 +20,9 @@ export const findShortestPath = (
   for (const { sourceId, targetId, distance, status } of edges) {
     if (status !== "active") continue;
 
-    if (adjacencyList.has(sourceId)) {
-      const exist = adjacencyList.get(sourceId)!;
-      exist?.push({ targetId, distance });
-      adjacencyList.set(sourceId, exist);
-    } else {
-      adjacencyList.set(sourceId, [{ targetId, distance }]);
-    }
+    if (!adjacencyList.has(sourceId)) adjacencyList.set(sourceId, []);
+    adjacencyList.get(sourceId)!.push({ targetId, distance });
+
   }
 
   // 2. Инициализируйте таблицы расстояний (distances) и предков (previous)
@@ -34,40 +31,57 @@ export const findShortestPath = (
   const unvisited = new Set<string>();
 
   for (const node of nodes) {
-    distances[node.id] = Infinity
-    previous[node.id] = null
-    unvisited.add(node.id)
+    distances[node.id] = Infinity;
+    previous[node.id] = null;
+    unvisited.add(node.id);
   }
   distances[startNodeId] = 0;
 
-  
+  // 3. Основной цикл Дейкстры
+  while (unvisited.size > 0) {
+    // Находим узел с минимальным расстоянием из еще непосещенных
+    let currentNodeId: string | null = null;
+    for (const nodeId of unvisited) {
+      if (
+        currentNodeId === null ||
+        distances[nodeId] < distances[currentNodeId]
+      ) {
+        currentNodeId = nodeId;
+      }
+    }
 
+    if (currentNodeId === null || distances[currentNodeId] === Infinity) break;
+    if (currentNodeId === endNodeId) break; // Дошли до цели!
 
-  /**
-   * const newNodes: SpaceNode[] = [
-    {
-      id: 'earth-hub',
-      name: 'Терра Центральный Хаб (Земля)',
-      coordinates: { x: 0, y: 0, z: 0 },
-      type: 'hub'
-    },
-    {
-      id: 'mars-station',
-      name: 'Аванпост Нью-Арес (Марс)',
-      coordinates: { x: 140, y: 250, z: -50 },
-      type: 'station'
-    },
-   
-  ];
-  const newEdges: SpaceEdge[] = [
-    {
-      sourceId: 'earth-hub',
-      targetId: 'mars-station',
-      distance: 2.25, 
-      costPerLightYear: 150,
-      status: 'active'
-    },
-    
-  ];
-   */
+    unvisited.delete(currentNodeId);
+
+    // Смотрим соседей текущего узла
+    const neighbors = adjacencyList.get(currentNodeId) || [];
+    for (const edge of neighbors) {
+      if (!unvisited.has(edge.targetId)) continue;
+
+      // Релаксация ребра: считаем альтернативный путь
+      const alternativePath = distances[currentNodeId] + edge.distance;
+      if (alternativePath < distances[edge.targetId]) {
+        distances[edge.targetId] = alternativePath;
+        previous[edge.targetId] = currentNodeId;
+      }
+    }
+  }
+
+  // 4. Восстановление пути
+  // Если до конечной точки расстояние Infinity — пути нет, возвращаем null
+  if (distances[endNodeId] === Infinity) return null;
+
+  const path: string[] = [];
+  let u: string | null = endNodeId;
+  while (u !== null) {
+    path.unshift(u);
+    u = previous[u];
+  }
+
+  return {
+    path,
+    totalDistance: distances[endNodeId],
+  };
 };
