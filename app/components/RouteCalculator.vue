@@ -1,6 +1,7 @@
 <!-- components/route/RouteCalculator.vue -->
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
+import type { NodeId } from "~/types/space";
 
 // Описываем исходную структуру станции из вашей базы данных
 interface SpaceNode {
@@ -34,8 +35,8 @@ const {
 } = useRouteCalculator();
 
 // Реактивные переменные теперь следят за отформатированными объектами
-const startStation = ref<any>(null);
-const endStation = ref<any>(null);
+const startStation = ref<NodeId | null>(null);
+const endStation = ref<NodeId | null>(null);
 const currentCriteria = ref<"distance" | "cost">("distance");
 
 const criteriaOptions = ["distance", "cost"];

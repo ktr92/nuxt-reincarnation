@@ -2,6 +2,7 @@
 
 import { findShortestPath } from "#server/utils/dijkstra";
 import { getSpaceData } from "#server/utils/spaceState";
+import { validateGraphIntegrity } from "~~/server/utils/validators";
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event);
@@ -27,6 +28,7 @@ export default defineEventHandler(async (event) => {
     };
   }
 
+
   
   // Получаем доступ к изолированному кэш-хранилищу Nitro в памяти
   const cache = useStorage('cache');
@@ -48,6 +50,16 @@ export default defineEventHandler(async (event) => {
 
   // Если в кэше пусто — запускаем расчет
   const graph = getSpaceData();
+
+  
+  if (!validateGraphIntegrity(graph.nodes, graph.edges)) {
+    return {
+      status: 'error',
+      code: '422',
+      error: 'Unprocessable Entity'
+    }
+     
+  }
   const result = findShortestPath(
     graph.nodes,
     graph.edges,

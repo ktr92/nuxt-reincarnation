@@ -2,6 +2,13 @@
 export type NodeId = `node_${string}`;
 export type EdgeId = `edge:${NodeId}->${NodeId}`;
 
+/** 
+ * Брендированный тип: гарантирует, что число прошло валидацию на знак (> 0).
+ * Защищает алгоритм Дейкстры от зацикливания при отрицательных весах.
+ */
+
+export type PositiveNumber = number & { readonly __brand: unique symbol };
+
 export interface SpaceNode {
   readonly id: NodeId
   readonly name: string
@@ -13,8 +20,8 @@ export interface SpaceEdge {
   readonly id?: EdgeId
  readonly sourceId: NodeId
  readonly targetId: NodeId
- readonly distance: number
- readonly costPerLightYear: number
+ readonly distance: PositiveNumber 
+ readonly costPerLightYear: PositiveNumber 
  readonly status: 'active' | 'blocked' | 'maintenance'
 }
 

@@ -1,5 +1,10 @@
 // server/utils/dijkstra.ts
-import type { SpaceNode, SpaceEdge } from "../../app/types/space";
+import type {
+  SpaceNode,
+  SpaceEdge,
+  NodeId,
+  PositiveNumber,
+} from "../../app/types/space";
 
 interface RouteResult {
   path: string[]; // Массив ID планет, например: ['earth-hub', 'mars-station', 'ceres-outpost']
@@ -18,13 +23,17 @@ const getWeight = (
 export const findShortestPath = (
   nodes: SpaceNode[],
   edges: SpaceEdge[],
-  startNodeId: string,
-  endNodeId: string,
+  startNodeId: NodeId,
+  endNodeId: NodeId,
   criteria: "distance" | "cost",
 ): RouteResult | null => {
   const adjacencyList = new Map<
     string,
-    { targetId: string; distance: number; costPerLightYear: number }[]
+    {
+      targetId: string;
+      distance: PositiveNumber;
+      costPerLightYear: PositiveNumber;
+    }[]
   >();
 
   for (const {
@@ -37,7 +46,7 @@ export const findShortestPath = (
     if (status !== "active") continue;
 
     if (!adjacencyList.has(sourceId)) adjacencyList.set(sourceId, []);
-    adjacencyList.get(sourceId)!.push({ targetId, distance, costPerLightYear });
+    adjacencyList.get(sourceId).push({ targetId, distance, costPerLightYear });
   }
 
   // 2. Инициализируйте таблицы расстояний (distances) и предков (previous)
@@ -66,7 +75,7 @@ export const findShortestPath = (
     }
 
     if (currentNodeId === null || distances[currentNodeId] === Infinity) break;
-    if (currentNodeId === endNodeId) break; // Дошли до цели!
+    if (currentNodeId === endNodeId) break; // Дошли до цели
 
     unvisited.delete(currentNodeId);
 
@@ -80,8 +89,8 @@ export const findShortestPath = (
       // Если criteria === 'cost', вес равен edge.distance * edge.costPerLightYear
 
       const alternativePath =
-        distances[currentNodeId]! + getWeight(edge, criteria);
-      if (alternativePath < distances[edge.targetId]!) {
+        distances[currentNodeId] + getWeight(edge, criteria);
+      if (alternativePath < distances[edge.targetId]) {
         distances[edge.targetId] = alternativePath;
         previous[edge.targetId] = currentNodeId;
       }
