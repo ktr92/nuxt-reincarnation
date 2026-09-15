@@ -2,79 +2,105 @@
 
 import { findShortestPath } from "#server/utils/dijkstra";
 import { getSpaceData } from "#server/utils/spaceState";
-import { validateGraphIntegrity } from "~~/server/utils/validators";
+import { ApiResponse, NodeId, RouteResult } from "~/types/space";
+import {
+  isValidNodeId,
+  validateGraphIntegrity,
+} from "~~/server/utils/validators";
 
-export default defineEventHandler(async (event) => {
-  const body = await readBody(event);
+/**
+ * Описываем строгий контракт для тела входящего запроса
+ */
+interface CalculateRouteRequestBody {
+  startNodeId: unknown;
+  endNodeId: unknown;
+  currentCriteria: unknown;
+}
 
-  if (!body || !body.startNodeId || !body.endNodeId) {
-    throw createError({
-      statusCode: 400,
-      statusMessage:
-        "Bad Request: startNodeId and endNodeId are required fields.",
-    });
-  }
+export default defineEventHandler(
+  async (event): Promise<ApiResponse<RouteResult>> => {
+    const body = await readBody<CalculateRouteRequestBody>(event);
 
-  const { startNodeId, endNodeId, currentCriteria } = body;
-  const criteria = currentCriteria === 'cost' ? 'cost' : 'distance';
-
-  if (startNodeId === endNodeId) {
-    return {
-      status: "success",
-      data: {
-        path: [startNodeId],
-        totalDistance: 0,
-      },
-    };
-  }
-
-
-  
-  // Получаем доступ к изолированному кэш-хранилищу Nitro в памяти
-  const cache = useStorage('cache');
-
-  // Формируем уникальный ключ кэша (хэш подзадачи DP)
-  const cacheKey = `route:${startNodeId}:${endNodeId}:${criteria}`;
-
-  // Проверяем, считали ли мы этот путь ранее O(1)
-  const cachedResult = await cache.getItem(cacheKey);
-
-  if (cachedResult) {
-    // Если нашли — отдаем мгновенно, расчет маршрута не запускается!
-    return {
-      status: "success",
-      data: cachedResult,
-      fromCache: true // Флаг для UI (метрика эффективности)
-    };
-  }
-
-  // Если в кэше пусто — запускаем расчет
-  const graph = getSpaceData();
-
-  
-  if (!validateGraphIntegrity(graph.nodes, graph.edges)) {
-    return {
-      status: 'error',
-      code: '422',
-      error: 'Unprocessable Entity'
+    if (
+      !body ||
+      !isValidNodeId(body.startNodeId) ||
+      !isValidNodeId(body.endNodeId)
+    ) {
+      setResponseStatus(event, 400);
+      return {
+        status: "error",
+        error:
+          "Bad Request: startNodeId and endNodeId must be valid NodeId strings formatted as 'node_${string}'.",
+        code: 400,
+      };
     }
-     
-  }
-  const result = findShortestPath(
-    graph.nodes,
-    graph.edges,
-    startNodeId,
-    endNodeId,
-    criteria
-  );
 
-  // Сохраняем результат в кэш, чтобы помочь будущим запросам
-  if (result) {
+    const startNodeId: NodeId = body.startNodeId;
+    const endNodeId: NodeId = body.endNodeId;
+    const criteria = body.currentCriteria === "cost" ? "cost" : "distance";
+
+    if (startNodeId === endNodeId) {
+      return {
+        status: "success",
+        data: {
+          path: [startNodeId],
+          totalWeight: 0,
+        },
+      };
+    }
+
+    // Если в кэше пусто — запускаем расчет
+    const graph = getSpaceData();
+
+    if (!validateGraphIntegrity(graph.nodes, graph.edges)) {
+      return {
+        status: "error",
+        code: 422,
+        error: "Unprocessable Entity",
+      };
+    }
+
+    // Получаем доступ к изолированному кэш-хранилищу Nitro в памяти
+    const cache = useStorage("cache");
+
+    // Формируем уникальный ключ кэша (хэш подзадачи DP)
+    const cacheKey = `route:${startNodeId}:${endNodeId}:${criteria}`;
+
+    // Проверяем, считали ли мы этот путь ранее O(1)
+    const cachedResult = await cache.getItem<RouteResult>(cacheKey);
+
+    if (cachedResult) {
+      // Если нашли — отдаем мгновенно, расчет маршрута не запускается!
+      return {
+        status: "success",
+        data: cachedResult,
+        fromCache: true, // Флаг для UI (метрика эффективности)
+      };
+    }
+
+    const result = findShortestPath(
+      graph.nodes,
+      graph.edges,
+      startNodeId,
+      endNodeId,
+      criteria,
+    );
+
+    if (!result) {
+      setResponseStatus(event, 404);
+      return {
+        status: "error",
+        error: `Hyperspace Route Not Found: Impossible to establish a stable lane between "${startNodeId}" and "${endNodeId}" using "${criteria}" optimization strategy.`,
+        code: 404,
+      };
+    }
+
+    // Сохраняем результат в кэш, чтобы помочь будущим запросам
     await cache.setItem(cacheKey, result);
-  }
 
-  return {
-    status: "success",
-    data: result,
-  };
-});
+    return {
+      status: "success",
+      data: result,
+    };
+  },
+);

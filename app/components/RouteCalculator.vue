@@ -1,26 +1,36 @@
 <!-- components/route/RouteCalculator.vue -->
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import type { NodeId } from "~/types/space";
+import type { NodeId, SpaceNode } from "~/types/space";
 
-// Описываем исходную структуру станции из вашей базы данных
-interface SpaceNode {
-  id: string;
-  name: string;
-  coordinates?: { x: number; y: number; z: number };
-  type?: string;
+
+/**
+ * Описываем строгий UI-интерфейс, который явно совместим с Nuxt UI.
+ * Мы копируем нужные поля из SpaceNode, но безопасно переименовываем конфликтный `type`.
+ */
+interface UISelectSpaceNode {
+  readonly id: NodeId;
+  readonly label: string;          // Требуется для отображения текста в Nuxt UI
+  readonly stationType: 'hub' | 'station' | 'outpost'; // Переименовано, чтобы избежать конфликта
+  readonly coordinates: {
+    readonly x: number;
+    readonly y: number;
+    readonly z: number;
+  };
 }
 
 // Принимаем массив узлов от NetworkDashboard
 const props = defineProps<{
-  nodes: SpaceNode[];
+  readonly nodes: readonly SpaceNode[];
 }>();
 
 // ПРЕОБРАЗОВАНИЕ (Маппинг): Добавляем обязательное для Nuxt UI v3 поле "label"
-const formattedItems = computed(() => {
+const formattedItems = computed<UISelectSpaceNode[]>(() => {
   return props.nodes.map((node) => ({
-    ...node,
-    label: node.name, // Задаем понятное имя для выпадающего списка
+    id: node.id,
+    label: node.name,
+    stationType: node.type, // Безопасный перенос доменного типа
+    coordinates: node.coordinates
   }));
 });
 
@@ -35,11 +45,12 @@ const {
 } = useRouteCalculator();
 
 // Реактивные переменные теперь следят за отформатированными объектами
-const startStation = ref<NodeId | null>(null);
-const endStation = ref<NodeId | null>(null);
+const startStation = ref<UISelectSpaceNode | undefined>(undefined);
+const endStation = ref<UISelectSpaceNode | undefined>(undefined);
 const currentCriteria = ref<"distance" | "cost">("distance");
 
-const criteriaOptions = ["distance", "cost"];
+type OptimizationCriteria = "distance" | "cost";
+const criteriaOptions: OptimizationCriteria[] = ["distance", "cost"];
 
 // Сброс результатов при изменении выбора
 watch([startStation, endStation, currentCriteria], () => {
@@ -51,6 +62,9 @@ watch([startStation, endStation, currentCriteria], () => {
 // Отправка формы на сервер Nitro
 const handleCalculate = async () => {
   if (!startStation.value || !endStation.value) return;
+
+  // Компилятор теперь  уверен, что .id — это валидный NodeId, а не случайный string
+
   await calculatePath(
     startStation.value.id,
     endStation.value.id,
@@ -127,7 +141,7 @@ const handleCalculate = async () => {
       <UAlert
         v-if="error"
         icon="i-heroicons-exclamation-triangle"
-        color="red"
+        color="error"
         variant="soft"
         title="Маршрут заблокирован"
         :description="error"

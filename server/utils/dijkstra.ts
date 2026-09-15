@@ -1,18 +1,27 @@
-// server/utils/dijkstra.ts
 import type {
   SpaceNode,
   SpaceEdge,
   NodeId,
   PositiveNumber,
+  RouteResult,
 } from "../../app/types/space";
 
-interface RouteResult {
-  path: string[]; // Массив ID планет, например: ['earth-hub', 'mars-station', 'ceres-outpost']
-  totalWeight: number; // Итоговое расстояние
+/**
+ * Внутренний интерфейс для смежных узлов.
+ * Все поля строго типизированы, никаких сырых примитивов.
+ */
+interface AdjacentLink {
+  readonly targetId: NodeId;
+  readonly distance: PositiveNumber;
+  readonly costPerLightYear: PositiveNumber;
 }
 
+/**
+ * Чистая функция для вычисления веса ребра на основе выбранного критерия.
+ * Возвращает number, так как при перемножении бренды стираются, что математически корректно.
+ */
 const getWeight = (
-  edge: { distance: number; costPerLightYear: number },
+  edge: AdjacentLink,
   criteria: "distance" | "cost",
 ): number => {
   return criteria === "distance"
@@ -20,96 +29,113 @@ const getWeight = (
     : edge.distance * edge.costPerLightYear;
 };
 
+/**
+ * Алгоритм Дейкстры с гарантированной типобезопасностью на уровне компиляции.
+ * Исключает зависания и бесконечные циклы благодаря контракту PositiveNumber.
+ */
 export const findShortestPath = (
-  nodes: SpaceNode[],
-  edges: SpaceEdge[],
+  nodes: readonly SpaceNode[],
+  edges: readonly SpaceEdge[],
   startNodeId: NodeId,
   endNodeId: NodeId,
   criteria: "distance" | "cost",
 ): RouteResult | null => {
-  const adjacencyList = new Map<
-    string,
-    {
-      targetId: string;
-      distance: PositiveNumber;
-      costPerLightYear: PositiveNumber;
-    }[]
-  >();
+  // 1. Построение списка смежности (Adjacency List) с явной типизацией ключей NodeId
+  const adjacencyList = new Map<NodeId, AdjacentLink[]>();
 
-  for (const {
-    sourceId,
-    targetId,
-    distance,
-    status,
-    costPerLightYear,
-  } of edges) {
-    if (status !== "active") continue;
+  for (const edge of edges) {
+    if (edge.status !== "active") continue;
 
-    if (!adjacencyList.has(sourceId)) adjacencyList.set(sourceId, []);
-    adjacencyList.get(sourceId).push({ targetId, distance, costPerLightYear });
+    // Инициализируем массив для узла, если его еще нет
+    let links = adjacencyList.get(edge.sourceId);
+    if (!links) {
+      links = [];
+      adjacencyList.set(edge.sourceId, links);
+    }
+
+    links.push({
+      targetId: edge.targetId,
+      distance: edge.distance,
+      costPerLightYear: edge.costPerLightYear,
+    });
   }
 
-  // 2. Инициализируйте таблицы расстояний (distances) и предков (previous)
-  const distances: Record<string, number> = {};
-  const previous: Record<string, string | null> = {};
-  const unvisited = new Set<string>();
+  // 2. Инициализация таблиц расстояний и предков с использованием типизированных Record
+  const distances: Record<NodeId, number> = {} as Record<NodeId, number>;
+  const previous: Record<NodeId, NodeId | null> = {} as Record<
+    NodeId,
+    NodeId | null
+  >;
+  const unvisited = new Set<NodeId>();
 
   for (const node of nodes) {
     distances[node.id] = Infinity;
     previous[node.id] = null;
     unvisited.add(node.id);
   }
+
+  // Защита: Если стартовая точка не существует в графе, вычисления не имеют смысла
+  if (!unvisited.has(startNodeId)) return null;
   distances[startNodeId] = 0;
 
-  // 3. Основной цикл Дейкстры
+  // 3. Основной вычислительный цикл
   while (unvisited.size > 0) {
-    // Находим узел с минимальным расстоянием из еще непосещенных
-    let currentNodeId: string | null = null;
+    let currentNodeId: NodeId | null = null;
+
+    // Поиск непосещенного узла с минимальным весом
     for (const nodeId of unvisited) {
-      if (
-        currentNodeId === null ||
-        distances[nodeId] < distances[currentNodeId]
-      ) {
+      const distNode = distances[nodeId] ?? Infinity;
+      const distCurrent =
+        currentNodeId !== null
+          ? (distances[currentNodeId] ?? Infinity)
+          : Infinity;
+
+      if (currentNodeId === null || distNode < distCurrent) {
         currentNodeId = nodeId;
       }
     }
 
-    if (currentNodeId === null || distances[currentNodeId] === Infinity) break;
-    if (currentNodeId === endNodeId) break; // Дошли до цели
+    if (currentNodeId === null) break;
+
+    // Если мы уперлись в недостижимый узел или дошли до целевой точки — останавливаемся
+    const currentNodeDistance = distances[currentNodeId] ?? Infinity;
+    if (currentNodeDistance === Infinity) break;
+    if (currentNodeId === endNodeId) break;
 
     unvisited.delete(currentNodeId);
 
-    // Смотрим соседей текущего узла
-    const neighbors = adjacencyList.get(currentNodeId) || [];
+    // Обработка соседей текущего узла
+    const neighbors = adjacencyList.get(currentNodeId) ?? [];
     for (const edge of neighbors) {
       if (!unvisited.has(edge.targetId)) continue;
 
-      // Релаксация ребра: считаем альтернативный путь
-      // Если criteria === 'distance', вес равен edge.distance.
-      // Если criteria === 'cost', вес равен edge.distance * edge.costPerLightYear
+      const targetNodeDistance = distances[edge.targetId] ?? Infinity;
+      const alternativePath = currentNodeDistance + getWeight(edge, criteria);
 
-      const alternativePath =
-        distances[currentNodeId] + getWeight(edge, criteria);
-      if (alternativePath < distances[edge.targetId]) {
+      if (alternativePath < targetNodeDistance) {
         distances[edge.targetId] = alternativePath;
         previous[edge.targetId] = currentNodeId;
       }
     }
   }
 
-  // 4. Восстановление пути
-  // Если до конечной точки расстояние Infinity — пути нет, возвращаем null
+  // 4. Проверка достижимости целевого узла
   if (distances[endNodeId] === Infinity) return null;
 
-  const path: string[] = [];
-  let u: string | null = endNodeId;
+  const finalWeight = distances[endNodeId] ?? Infinity;
+  if (finalWeight === Infinity) return null;
+
+  // 5. Восстановление итогового пути
+  const path: NodeId[] = [];
+  let u: NodeId | null = endNodeId;
+
   while (u !== null) {
     path.push(u);
-    u = previous[u];
+    u = previous[u] ?? null; // Избегаем undefined, строго придерживаемся контракта Nullable
   }
 
   return {
     path: path.reverse(),
-    totalWeight: distances[endNodeId],
+    totalWeight: finalWeight,
   };
 };
