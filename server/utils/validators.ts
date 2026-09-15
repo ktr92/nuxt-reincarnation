@@ -6,6 +6,7 @@ import type {
   EdgeId,
   PositiveNumber
 } from "../../app/types/space";
+import { DataIntegrityError } from "./errors";
 
 
 
@@ -43,45 +44,45 @@ export function isPositiveNumber(value: unknown): value is PositiveNumber {
  */
 export function assertSpaceEdge(edge: unknown): asserts edge is SpaceEdge {
   if (!edge || typeof edge !== 'object') {
-    throw new Error("Data Integrity Error: Edge must be a non-null object.");
+    throw new DataIntegrityError("Data Integrity Error: Edge must be a non-null object.");
   }
 
   const e = edge as Record<string, any>;
 
   // 1. Валидация идентификаторов узлов
   if (!isValidNodeId(e.sourceId)) {
-    throw new Error(`Data Integrity Error: Invalid sourceId format "${e.sourceId}". Expected "node_\${string}"`);
+    throw new DataIntegrityError(`Data Integrity Error: Invalid sourceId format "${e.sourceId}". Expected "node_\${string}"`);
   }
   if (!isValidNodeId(e.targetId)) {
-    throw new Error(`Data Integrity Error: Invalid targetId format "${e.targetId}". Expected "node_\${string}"`);
+    throw new DataIntegrityError(`Data Integrity Error: Invalid targetId format "${e.targetId}". Expected "node_\${string}"`);
   }
 
   // 2. Алгоритмическая защита: Валидация весов и автоматическое брендирование
   if (!isPositiveNumber(e.distance)) {
-    throw new Error(`Data Integrity Error: distance must be a positive number (> 0). Got: ${e.distance}`);
+    throw new DataIntegrityError(`Data Integrity Error: distance must be a positive number (> 0). Got: ${e.distance}`);
   }
   if (!isPositiveNumber(e.costPerLightYear) && e.costPerLightYear !== 0) {
     // Стоимость может быть 0 (бесплатный маршрут), но не отрицательной
     if (typeof e.costPerLightYear !== 'number' || Number.isNaN(e.costPerLightYear) || e.costPerLightYear < 0) {
-      throw new Error(`Data Integrity Error: costPerLightYear must be a non-negative number (>= 0). Got: ${e.costPerLightYear}`);
+      throw new DataIntegrityError(`Data Integrity Error: costPerLightYear must be a non-negative number (>= 0). Got: ${e.costPerLightYear}`);
     }
   }
 
   // 3. Защита от петель (самолинкования графа)
   if (e.sourceId === e.targetId) {
-    throw new Error(`Topology Error: Loop detected. Node "${e.sourceId}" cannot link to itself.`);
+    throw new DataIntegrityError(`Topology Error: Loop detected. Node "${e.sourceId}" cannot link to itself.`);
   }
 
   // 4. Проверка и валидация EdgeId
   const expectedEdgeId = `edge:${e.sourceId}->${e.targetId}`;
   if (e.id && !isValidEdgeId(e.id, e.sourceId, e.targetId)) {
-    throw new Error(`Topology Error: Edge ID mismatch. Got "${e.id}", expected "${expectedEdgeId}"`);
+    throw new DataIntegrityError(`Topology Error: Edge ID mismatch. Got "${e.id}", expected "${expectedEdgeId}"`);
   }
 
   // 5. Проверка допустимых статусов
   const allowedStatuses = ['active', 'blocked', 'maintenance'];
   if (!allowedStatuses.includes(e.status)) {
-    throw new Error(`Data Integrity Error: Invalid edge status "${e.status}".`);
+    throw new DataIntegrityError(`Data Integrity Error: Invalid edge status "${e.status}".`);
   }
 }
 
