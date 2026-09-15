@@ -14,7 +14,9 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  const { startNodeId, endNodeId } = body;
+  const { startNodeId, endNodeId, currentCriteria } = body;
+  const criteria = currentCriteria === 'cost' ? 'cost' : 'distance';
+
   if (startNodeId === endNodeId) {
     return {
       status: "success",
@@ -25,13 +27,39 @@ export default defineEventHandler(async (event) => {
     };
   }
 
+  
+  // Получаем доступ к изолированному кэш-хранилищу Nitro в памяти
+  const cache = useStorage('cache');
+
+  // Формируем уникальный ключ кэша (хэш подзадачи DP)
+  const cacheKey = `route:${startNodeId}:${endNodeId}:${criteria}`;
+
+  // Проверяем, считали ли мы этот путь ранее O(1)
+  const cachedResult = await cache.getItem(cacheKey);
+
+  if (cachedResult) {
+    // Если нашли — отдаем мгновенно, расчет маршрута не запускается!
+    return {
+      status: "success",
+      data: cachedResult,
+      fromCache: true // Флаг для UI (метрика эффективности)
+    };
+  }
+
+  // Если в кэше пусто — запускаем расчет
   const graph = getSpaceData();
   const result = findShortestPath(
     graph.nodes,
     graph.edges,
     startNodeId,
     endNodeId,
+    criteria
   );
+
+  // Сохраняем результат в кэш, чтобы помочь будущим запросам
+  if (result) {
+    await cache.setItem(cacheKey, result);
+  }
 
   return {
     status: "success",

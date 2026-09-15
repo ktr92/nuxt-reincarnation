@@ -3,26 +3,41 @@ import type { SpaceNode, SpaceEdge } from "../../app/types/space";
 
 interface RouteResult {
   path: string[]; // Массив ID планет, например: ['earth-hub', 'mars-station', 'ceres-outpost']
-  totalDistance: number; // Итоговое расстояние
+  totalWeight: number; // Итоговое расстояние
 }
+
+const getWeight = (
+  edge: { distance: number; costPerLightYear: number },
+  criteria: "distance" | "cost",
+): number => {
+  return criteria === "distance"
+    ? edge.distance
+    : edge.distance * edge.costPerLightYear;
+};
 
 export const findShortestPath = (
   nodes: SpaceNode[],
   edges: SpaceEdge[],
   startNodeId: string,
   endNodeId: string,
+  criteria: "distance" | "cost",
 ): RouteResult | null => {
   const adjacencyList = new Map<
     string,
-    { targetId: string; distance: number }[]
+    { targetId: string; distance: number; costPerLightYear: number }[]
   >();
 
-  for (const { sourceId, targetId, distance, status } of edges) {
+  for (const {
+    sourceId,
+    targetId,
+    distance,
+    status,
+    costPerLightYear,
+  } of edges) {
     if (status !== "active") continue;
 
     if (!adjacencyList.has(sourceId)) adjacencyList.set(sourceId, []);
-    adjacencyList.get(sourceId)!.push({ targetId, distance });
-
+    adjacencyList.get(sourceId)!.push({ targetId, distance, costPerLightYear });
   }
 
   // 2. Инициализируйте таблицы расстояний (distances) и предков (previous)
@@ -61,8 +76,12 @@ export const findShortestPath = (
       if (!unvisited.has(edge.targetId)) continue;
 
       // Релаксация ребра: считаем альтернативный путь
-      const alternativePath = distances[currentNodeId] + edge.distance;
-      if (alternativePath < distances[edge.targetId]) {
+      // Если criteria === 'distance', вес равен edge.distance.
+      // Если criteria === 'cost', вес равен edge.distance * edge.costPerLightYear
+
+      const alternativePath =
+        distances[currentNodeId]! + getWeight(edge, criteria);
+      if (alternativePath < distances[edge.targetId]!) {
         distances[edge.targetId] = alternativePath;
         previous[edge.targetId] = currentNodeId;
       }
@@ -76,12 +95,12 @@ export const findShortestPath = (
   const path: string[] = [];
   let u: string | null = endNodeId;
   while (u !== null) {
-    path.unshift(u);
+    path.push(u);
     u = previous[u];
   }
 
   return {
-    path,
-    totalDistance: distances[endNodeId],
+    path: path.reverse(),
+    totalWeight: distances[endNodeId],
   };
 };

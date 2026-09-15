@@ -3,11 +3,12 @@
 // Описываем структуру ответа бэкенда
 interface RouteData {
   path: string[];
-  totalDistance: number;
+  totalWeight: number;
 }
 
 interface CalculateResponse {
-  status: 'success' | 'fail';
+  status: "success" | "fail";
+  fromCache: boolean;
   data: RouteData | null;
   message?: string;
 }
@@ -17,35 +18,45 @@ export const useRouteCalculator = () => {
   const calculatedRoute = ref<RouteData | null>(null);
   const isLoading = ref(false);
   const error = ref<string | null>(null);
+  const isFromCache = ref(false);
 
   /**
    * Метод отправки запроса на бэкенд для расчета пути
    */
-  const calculatePath = async (startNodeId: string, endNodeId: string) => {
+  const calculatePath = async (
+    startNodeId: string,
+    endNodeId: string,
+    currentCriteria: "distance" | "cost",
+  ) => {
     // Сброс состояний перед новым расчетом
     isLoading.value = true;
     error.value = null;
     calculatedRoute.value = null;
+    isFromCache.value = false;
 
     try {
       // Используем $fetch для императивного POST-запроса по событию
-      const response = await $fetch<CalculateResponse>('/api/route/calculate', {
-        method: 'POST',
+      const response = await $fetch<CalculateResponse>("/api/route/calculate", {
+        method: "POST",
         body: {
           startNodeId,
-          endNodeId
-        }
+          endNodeId,
+          currentCriteria,
+        },
       });
 
-      if (response.status === 'success' && response.data) {
+      if (response.status === "success" && response.data) {
         calculatedRoute.value = response.data;
+        isFromCache.value = response.fromCache;
       } else {
         // Обработка логического fail (например, изолированные ноды)
-        error.value = response.message || 'Не удалось проложить маршрут.';
+        error.value = response.message || "Не удалось проложить маршрут.";
       }
     } catch (err: any) {
       // Обработка системных ошибок сервера (400, 500 и т.д.)
-      error.value = err.data?.statusMessage || 'Произошла непредвиденная ошибка на сервере Space-ERP.';
+      error.value =
+        err.data?.statusMessage ||
+        "Произошла непредвиденная ошибка на сервере Space-ERP.";
     } finally {
       isLoading.value = false;
     }
@@ -57,6 +68,7 @@ export const useRouteCalculator = () => {
   const clearRoute = () => {
     calculatedRoute.value = null;
     error.value = null;
+    isFromCache.value = false; 
   };
 
   return {
@@ -64,6 +76,7 @@ export const useRouteCalculator = () => {
     isLoading,
     error,
     calculatePath,
-    clearRoute
+    clearRoute,
+    isFromCache
   };
 };
