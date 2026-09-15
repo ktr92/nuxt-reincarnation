@@ -6,7 +6,7 @@ import { ApiResponse, NodeId, RouteResult } from "~/types/space";
 import {
   isValidNodeId,
   validateGraphIntegrity,
-} from "~~/server/utils/validators";
+} from "#server/utils/validators";
 
 /**
  * Описываем строгий контракт для тела входящего запроса
