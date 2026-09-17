@@ -1,24 +1,14 @@
 // composables/useRouteCalculator.ts
-
-// Описываем структуру ответа бэкенда
-interface RouteData {
-  path: string[];
-  totalWeight: number;
-}
-
-interface CalculateResponse {
-  status: "success" | "fail";
-  fromCache: boolean;
-  data: RouteData | null;
-  message?: string;
-}
+import type { ApiResponse, ApiResponseError, RouteResult } from "~/types/space";
+import { isApiResponseError } from "~/utils/api";
 
 export const useRouteCalculator = () => {
   // Реактивные состояния для UI
-  const calculatedRoute = ref<RouteData | null>(null);
+  const calculatedRoute = ref<RouteResult | null>(null);
   const isLoading = ref(false);
   const error = ref<string | null>(null);
   const isFromCache = ref(false);
+
 
   /**
    * Метод отправки запроса на бэкенд для расчета пути
@@ -35,23 +25,27 @@ export const useRouteCalculator = () => {
     isFromCache.value = false;
 
     try {
-      // Используем $fetch для императивного POST-запроса по событию
-      const response = await $fetch<CalculateResponse>("/api/route/calculate", {
-        method: "POST",
-        body: {
-          startNodeId,
-          endNodeId,
-          currentCriteria,
+      // Запрос идет на роут Nitro. Передаем тип ответа ApiResponse<RouteResult>
+      const response = await $fetch<ApiResponse<RouteResult>>(
+        "/api/route/calculate",
+        {
+          method: "POST",
+          body: {
+            startNodeId,
+            endNodeId,
+            currentCriteria,
+          },
         },
-      });
+      );
 
-      if (response.status === "success" && response.data) {
-        calculatedRoute.value = response.data;
-        isFromCache.value = response.fromCache;
-      } else {
-        // Обработка логического fail (например, изолированные ноды)
-        error.value = response.message || "Не удалось проложить маршрут.";
+      if (isApiResponseError(response)) {
+        error.value = response.error || "Не удалось проложить маршрут.";
+        return;
       }
+
+      calculatedRoute.value = response.data;
+      isFromCache.value = response.fromCache ?? false;
+
     } catch (err: any) {
       // Обработка системных ошибок сервера (400, 500 и т.д.)
       error.value =
@@ -68,7 +62,7 @@ export const useRouteCalculator = () => {
   const clearRoute = () => {
     calculatedRoute.value = null;
     error.value = null;
-    isFromCache.value = false; 
+    isFromCache.value = false;
   };
 
   return {
@@ -77,6 +71,6 @@ export const useRouteCalculator = () => {
     error,
     calculatePath,
     clearRoute,
-    isFromCache
+    isFromCache,
   };
 };

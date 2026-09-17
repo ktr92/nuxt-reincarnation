@@ -1,3 +1,5 @@
+// server/api/network.post.ts
+
 import { initSpaceData } from "#server/utils/spaceState";
 
 export default defineEventHandler(async (event) => {
@@ -10,6 +12,9 @@ export default defineEventHandler(async (event) => {
   for (const key of keys) {
     await cache.removeItem(key);
   }
+
+  const nitroApp = useNitroApp();
+  await nitroApp.hooks.callHook('space-erp:graph-updated', body.nodes, body.edges);
 
   return {
     status: "success",

@@ -16,3 +16,12 @@ export class DataIntegrityError extends Error {
     Object.setPrototypeOf(this, DataIntegrityError.prototype);
   }
 }
+
+export class GraphAnomalyError extends Error {
+  
+}
+
+export function logGraphAnomaly(message: string, details?: any) {
+  const timestamp = new Date().toISOString()
+  console.warn(`[ANOMALY DETECTED] [${timestamp}] 🛰️: ${message}`, details || '')
+}

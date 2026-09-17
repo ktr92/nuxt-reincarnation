@@ -5,9 +5,7 @@ import { getSpaceData } from "#server/utils/spaceState";
 import { ApiResponse, NodeId, RouteResult } from "~/types/space";
 import {
   isValidNodeId,
-  validateGraphIntegrity,
 } from "#server/utils/validators";
-
 /**
  * Описываем строгий контракт для тела входящего запроса
  */
@@ -52,13 +50,6 @@ export default defineEventHandler(
     // Если в кэше пусто — запускаем расчет
     const graph = getSpaceData();
 
-    if (!validateGraphIntegrity(graph.nodes, graph.edges)) {
-      return {
-        status: "error",
-        code: 422,
-        error: "Unprocessable Entity",
-      };
-    }
 
     // Получаем доступ к изолированному кэш-хранилищу Nitro в памяти
     const cache = useStorage("cache");
@@ -86,12 +77,13 @@ export default defineEventHandler(
       criteria,
     );
 
-    if (!result) {
+     // Гарантия консистентности: если пути нет, возвращаем регламентированную ошибку API
+    if (!result || result.totalWeight === Infinity || result.path.length === 0) {
       setResponseStatus(event, 404);
       return {
         status: "error",
-        error: `Hyperspace Route Not Found: Impossible to establish a stable lane between "${startNodeId}" and "${endNodeId}" using "${criteria}" optimization strategy.`,
-        code: 404,
+        error: `Маршрут заблокирован или целевой сектор изолирован. Невозможно проложить стабильный гиперпуть между "${startNodeId}" и "${endNodeId}".`,
+        code: 404
       };
     }
 

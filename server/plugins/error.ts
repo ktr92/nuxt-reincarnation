@@ -37,3 +37,4 @@ export default defineNitroPlugin((nitroApp) => {
     return appendResponseHeader(event, 'Content-Type', 'application/json'), send(event, JSON.stringify(errorResponse));
   });
 });
+
