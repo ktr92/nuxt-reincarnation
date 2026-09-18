@@ -13,7 +13,7 @@ declare module "nitropack" {
   }
 }
 
-defineNitroPlugin((nitroApp) => {
+export default defineNitroPlugin((nitroApp) => {
    // Подписываемся на кастомное событие обновления топологии
  nitroApp.hooks.hook('space-erp:graph-updated', (nodes: SpaceNode[], edges: SpaceEdge[]) => {
   if (!validateGraphIntegrity(nodes, edges)) {
