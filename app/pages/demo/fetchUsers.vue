@@ -4,7 +4,13 @@
       
       <li v-for="user of users" :id="user.id">
         <div>{{ user.name }}</div>
+        <div v-if="currentUser === user.id">
+          <div></div>
+          {{ currentUserEmail.email }}
+        </div>
         <button @click="fetchUser(user.id)">Показать email</button>
+        <br>
+        <br>
       </li>
     </ul>
   </div>
@@ -13,6 +19,7 @@
 <script setup lang="ts">
 import type { UseFetchOptions } from "#app";
 const currentUser = ref<string>('')
+const currentUserEmail = ref<string>('')
 const myFetch = <T,>(url: string, options?: UseFetchOptions<T>) => {
   const auth = useRequestHeader("authorization");
 
@@ -25,8 +32,18 @@ const myFetch = <T,>(url: string, options?: UseFetchOptions<T>) => {
   });
 };
 
-const fetchUser = (id: string) => currentUser.value = id;
-const { data:  } = await $fetch(`https://jsonplaceholder.typicode.com/users/`);
+const fetchUser = async (id: string) => {
+  currentUser.value = id;
+  try {
+    currentUserEmail.value = await myFetch(`https://jsonplaceholder.typicode.com/users/${currentUser.value}`, {
+      
+    });
+  } catch (error) {
+    console.error(error)
+  }
+ 
+}
+
 
 const {data: users} = await myFetch(`https://jsonplaceholder.typicode.com/users/`);
 </script>
